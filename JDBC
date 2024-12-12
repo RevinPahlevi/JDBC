@@ -1,0 +1,266 @@
+import java.sql.*;
+import java.text.SimpleDateFormat;
+import java.util.Scanner;
+
+public class Supermarket {
+    private static final String DB_URL = "jdbc:postgresql://localhost:5432/supermarket_db";
+    private static final String DB_USERNAME = "postgres";
+    private static final String DB_PASSWORD = "revinpahlevi";
+
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        String username, password, captchaInput, captcha = "HIHIa";
+        boolean isLoggedIn = false;
+
+        // Log in
+        System.out.println("+-----------------------------------------------------+");
+        System.out.println("Log in");
+        while (!isLoggedIn) {
+            try {
+                System.out.print("Username: ");
+                username = scanner.nextLine();
+
+                System.out.print("Password: ");
+                password = scanner.nextLine();
+
+                System.out.print("Captcha (" + captcha + "): ");
+                captchaInput = scanner.nextLine();
+
+                if (username.equals("admin") && password.equals("pinbro14") && captchaInput.equals(captcha)) {
+                    isLoggedIn = true;
+                    System.out.println("Login berhasil!");
+                } else {
+                    throw new Exception("Login gagal, terdapat kesalahan, ulangi lagi.");
+                }
+            } catch (Exception e) {
+                System.out.println(e.getMessage());
+            }
+        }
+        System.out.println("+-----------------------------------------------------+");
+
+        // Welcome message
+        System.out.println("Selamat Datang di Vin'sMart");
+        displayCurrentDateTime();
+        System.out.println("+-----------------------------------------------------+");
+
+        // Main menu
+        while (true) {
+            System.out.println("Pilih operasi:");
+            System.out.println("1. Tambah Faktur");
+            System.out.println("2. Lihat Faktur");
+            System.out.println("3. Update Faktur");
+            System.out.println("4. Hapus Faktur");
+            System.out.println("5. Keluar");
+            System.out.print("Pilih (1-5): ");
+            int choice = inputInteger(scanner, "Pilihan");
+
+            switch (choice) {
+                case 1:
+                    // Add Invoice
+                    addInvoice(scanner);
+                    break;
+                case 2:
+                    // View Invoices
+                    viewInvoices();
+                    break;
+                case 3:
+                    // Update Invoice
+                    updateInvoice(scanner);
+                    break;
+                case 4:
+                    // Delete Invoice
+                    deleteInvoice(scanner);
+                    break;
+                case 5:
+                    System.out.println("Keluar dari aplikasi...");
+                    scanner.close();
+                    return;
+                default:
+                    System.out.println("Pilihan tidak valid. Coba lagi.");
+            }
+        }
+    }
+
+    // Method to add a new invoice (Create)
+    public static void addInvoice(Scanner scanner) {
+        String noFaktur = inputString(scanner, "No. Faktur");
+        String kodeBarang = inputString(scanner, "Kode Barang");
+        String namaBarang = inputString(scanner, "Nama Barang");
+        double hargaBarang = inputDouble(scanner, "Harga Barang");
+        int jumlahBeli = inputInteger(scanner, "Jumlah Beli");
+
+        // Calculate total
+        double total = hargaBarang * jumlahBeli;
+
+        // Get current date
+        java.sql.Date tanggalTransaksi = new java.sql.Date(System.currentTimeMillis());
+
+        // Display Invoice
+        System.out.println("+-----------------------------------------------------+");
+        System.out.printf("No. Faktur      : %s%n", noFaktur);
+        System.out.printf("Kode Barang     : %s%n", kodeBarang);
+        System.out.printf("Nama Barang     : %s%n", namaBarang);
+        System.out.printf("Harga Barang    : %.2f%n", hargaBarang);
+        System.out.printf("Jumlah Beli     : %d%n", jumlahBeli);
+        System.out.printf("TOTAL           : %.2f%n", total);
+        System.out.printf("Tanggal         : %s%n", tanggalTransaksi);
+        System.out.println("+-----------------------------------------------------+");
+        System.out.println("Kasir           : Pinbro");
+        System.out.println("+-----------------------------------------------------+");
+
+        // Save to database
+        saveToDatabase(noFaktur, kodeBarang, namaBarang, hargaBarang, jumlahBeli, total, tanggalTransaksi);
+    }
+
+    // Method to view invoices (Read)
+    public static void viewInvoices() {
+        String query = "SELECT * FROM faktur";
+        try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD);
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(query)) {
+
+            System.out.println("+-----------------------------------------------------+");
+            System.out.println("No. Faktur | Kode Barang | Nama Barang | Harga Barang | Jumlah Beli | Total | Tanggal");
+            while (resultSet.next()) {
+                String noFaktur = resultSet.getString("no_faktur");
+                String kodeBarang = resultSet.getString("kode_barang");
+                String namaBarang = resultSet.getString("nama_barang");
+                double hargaBarang = resultSet.getDouble("harga_barang");
+                int jumlahBeli = resultSet.getInt("jumlah_beli");
+                double total = resultSet.getDouble("total");
+                Date tanggalTransaksi = resultSet.getDate("tanggal_transaksi");
+
+                System.out.printf("%s | %s | %s | %.2f | %d | %.2f | %s%n", noFaktur, kodeBarang, namaBarang, hargaBarang, jumlahBeli, total, tanggalTransaksi);
+            }
+            System.out.println("+-----------------------------------------------------+");
+        } catch (SQLException e) {
+            System.out.println("Terjadi kesalahan saat membaca data: " + e.getMessage());
+        }
+    }
+
+    // Method to update an invoice (Update)
+    public static void updateInvoice(Scanner scanner) {
+        String noFaktur = inputString(scanner, "No. Faktur yang ingin diupdate");
+
+        // Get new details
+        String kodeBarang = inputString(scanner, "Kode Barang Baru");
+        String namaBarang = inputString(scanner, "Nama Barang Baru");
+        double hargaBarang = inputDouble(scanner, "Harga Barang Baru");
+        int jumlahBeli = inputInteger(scanner, "Jumlah Beli Baru");
+
+        // Calculate new total
+        double total = hargaBarang * jumlahBeli;
+
+        // Update the invoice in the database
+        String query = "UPDATE faktur SET kode_barang = ?, nama_barang = ?, harga_barang = ?, jumlah_beli = ?, total = ? WHERE no_faktur = ?";
+        try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD);
+             PreparedStatement preparedStatement = connection.prepareStatement(query)) {
+
+            preparedStatement.setString(1, kodeBarang);
+            preparedStatement.setString(2, namaBarang);
+            preparedStatement.setDouble(3, hargaBarang);
+            preparedStatement.setInt(4, jumlahBeli);
+            preparedStatement.setDouble(5, total);
+            preparedStatement.setString(6, noFaktur);
+
+            int rowsUpdated = preparedStatement.executeUpdate();
+            if (rowsUpdated > 0) {
+                System.out.println("Faktur berhasil diupdate.");
+            } else {
+                System.out.println("No. Faktur tidak ditemukan.");
+            }
+        } catch (SQLException e) {
+            System.out.println("Terjadi kesalahan saat mengupdate faktur: " + e.getMessage());
+        }
+    }
+
+    // Method to delete an invoice (Delete)
+    public static void deleteInvoice(Scanner scanner) {
+        String noFaktur = inputString(scanner, "No. Faktur yang ingin dihapus");
+
+        String query = "DELETE FROM faktur WHERE no_faktur = ?";
+        try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD);
+             PreparedStatement preparedStatement = connection.prepareStatement(query)) {
+
+            preparedStatement.setString(1, noFaktur);
+
+            int rowsDeleted = preparedStatement.executeUpdate();
+            if (rowsDeleted > 0) {
+                System.out.println("Faktur berhasil dihapus.");
+            } else {
+                System.out.println("No. Faktur tidak ditemukan.");
+            }
+        } catch (SQLException e) {
+            System.out.println("Terjadi kesalahan saat menghapus faktur: " + e.getMessage());
+        }
+    }
+
+    // Method to save data to the database (Create)
+    public static void saveToDatabase(String noFaktur, String kodeBarang, String namaBarang, double hargaBarang, int jumlahBeli, double total, Date tanggalTransaksi) {
+        try (Connection connection = DriverManager.getConnection(DB_URL, DB_USERNAME, DB_PASSWORD)) {
+            String insertQuery = "INSERT INTO faktur (no_faktur, kode_barang, nama_barang, harga_barang, jumlah_beli, total, tanggal_transaksi) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement preparedStatement = connection.prepareStatement(insertQuery);
+            preparedStatement.setString(1, noFaktur);
+            preparedStatement.setString(2, kodeBarang);
+            preparedStatement.setString(3, namaBarang);
+            preparedStatement.setDouble(4, hargaBarang);
+            preparedStatement.setInt(5, jumlahBeli);
+            preparedStatement.setDouble(6, total);
+            preparedStatement.setDate(7, tanggalTransaksi);
+
+            int rowsInserted = preparedStatement.executeUpdate();
+            if (rowsInserted > 0) {
+                System.out.println("Data berhasil disimpan ke database.");
+            }
+        } catch (SQLException e) {
+            System.out.println("Terjadi kesalahan saat menyimpan data ke database: " + e.getMessage());
+        }
+    }
+
+    // Method to display the current date and time
+    public static void displayCurrentDateTime() {
+        java.util.Date date = new java.util.Date();
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+        System.out.println("Tanggal dan Waktu: " + dateFormat.format(date));
+    }
+
+    // Method to safely input an integer
+    public static int inputInteger(Scanner scanner, String prompt) {
+        while (true) {
+            try {
+                System.out.print(prompt + ": ");
+                return Integer.parseInt(scanner.nextLine());
+            } catch (NumberFormatException e) {
+                System.out.println(prompt + " harus berupa angka bulat yang valid!");
+            }
+        }
+    }
+
+    // Method to safely input a string
+    public static String inputString(Scanner scanner, String prompt) {
+        while (true) {
+            try {
+                System.out.print(prompt + ": ");
+                String input = scanner.nextLine();
+                if (input.isEmpty()) {
+                    throw new Exception(prompt + " tidak boleh kosong!");
+                }
+                return input;
+            } catch (Exception e) {
+                System.out.println(e.getMessage());
+            }
+        }
+    }
+
+    // Method to safely input a double
+    public static double inputDouble(Scanner scanner, String prompt) {
+        while (true) {
+            try {
+                System.out.print(prompt + ": ");
+                return Double.parseDouble(scanner.nextLine());
+            } catch (NumberFormatException e) {
+                System.out.println(prompt + " harus berupa angka desimal yang valid!");
+            }
+        }
+    }
+}
